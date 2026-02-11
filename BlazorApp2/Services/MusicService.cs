@@ -1,0 +1,76 @@
+using Microsoft.AspNetCore.Components.Forms;
+using System.IO;
+
+namespace BlazorApp2.Services
+{
+    public class MusicService
+    {
+        private readonly IWebHostEnvironment _environment;
+        private readonly ILogger<MusicService> _logger;
+        private readonly List<string> _supportedExtensions = new() { ".mp3", ".wav", ".ogg" };
+
+        public MusicService(IWebHostEnvironment environment, ILogger<MusicService> logger)
+        {
+            _environment = environment;
+            _logger = logger;
+
+            // Create the music directory if it doesn't exist
+            string musicDirectory = Path.Combine(_environment.WebRootPath, "music");
+            if (!Directory.Exists(musicDirectory))
+            {
+                Directory.CreateDirectory(musicDirectory);
+            }
+        }
+
+        public async Task<string?> UploadMusicAsync(IBrowserFile file)
+        {
+            try
+            {
+                string extension = Path.GetExtension(file.Name).ToLowerInvariant();
+                
+                if (!_supportedExtensions.Contains(extension))
+                {
+                    _logger.LogWarning("Unsupported file extension: {Extension}", extension);
+                    return null;
+                }
+
+                // Create a unique filename to avoid collisions
+                string fileName = $"{Path.GetFileNameWithoutExtension(file.Name)}_{DateTime.Now:yyyyMMddHHmmss}{extension}";
+                string filePath = Path.Combine(_environment.WebRootPath, "music", fileName);
+
+                using (var stream = file.OpenReadStream(10 * 1024 * 1024)) // 10MB max
+                {
+                    using (var fileStream = new FileStream(filePath, FileMode.Create))
+                    {
+                        await stream.CopyToAsync(fileStream);
+                    }
+                }
+
+                return fileName;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error uploading music file");
+                return null;
+            }
+        }
+
+        public IEnumerable<string> GetAllMusicFiles()
+        {
+            string musicDirectory = Path.Combine(_environment.WebRootPath, "music");
+            if (!Directory.Exists(musicDirectory))
+            {
+                return Enumerable.Empty<string>();
+            }
+
+            return Directory.GetFiles(musicDirectory)
+                            .Select(Path.GetFileName)
+                            .Where(f => _supportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()));
+        }
+
+        public string GetMusicUrl(string fileName)
+        {
+            return $"/music/{fileName}";
+        }
+    }
+}

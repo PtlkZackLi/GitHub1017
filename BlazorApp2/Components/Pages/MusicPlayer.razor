@@ -1,0 +1,255 @@
+@page "/musicplayer"
+@using BlazorApp2.Services
+@using Microsoft.AspNetCore.SignalR.Client
+@using BlazorApp2.Hubs
+@using Microsoft.AspNetCore.Components.Forms
+@inject MusicService MusicService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+
+<style>
+    .music-player {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .upload-section {
+        margin-bottom: 20px;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+    }
+
+    .player-controls {
+        margin-bottom: 20px;
+    }
+
+    .player-section {
+        margin-bottom: 20px;
+    }
+
+    .broadcast-section {
+        margin-bottom: 20px;
+    }
+
+    audio {
+        width: 100%;
+        margin-top: 10px;
+    }
+
+    .list-group-item.active {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+    }
+</style>
+
+<h3>Music Player</h3>
+
+<div class="music-player">
+    <div class="upload-section">
+        <h4>Upload Music</h4>
+        <InputFile OnChange="@UploadMusic" accept=".mp3,.wav,.ogg" />
+        @if (!string.IsNullOrEmpty(uploadMessage))
+        {
+            <div class="alert @(uploadSuccess ? "alert-success" : "alert-danger")">
+                @uploadMessage
+            </div>
+        }
+    </div>
+
+    <div class="player-controls mt-4">
+        <h4>Music Library</h4>
+        @if (musicFiles.Any())
+        {
+            <div class="list-group">
+                @foreach (var musicFile in musicFiles)
+                {
+                    <button class="list-group-item list-group-item-action @(currentMusicFile == musicFile ? "active" : "")"
+                            @onclick="() => PlayMusic(musicFile)">
+                        @musicFile
+                    </button>
+                }
+            </div>
+        }
+        else
+        {
+            <p>No music files available. Please upload some music first.</p>
+        }
+    </div>
+
+    <div class="player-section mt-4">
+        <h4>Now Playing</h4>
+        @if (!string.IsNullOrEmpty(currentMusicFile))
+        {
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">@currentMusicFile</h5>
+                    <audio id="musicPlayer" controls autoplay
+                           @onplay="() => BroadcastMusicPlaying(currentMusicFile)"
+                           @onpause="() => BroadcastMusicPaused(currentMusicFile)"
+                           @onended="() => BroadcastMusicStopped()">
+                        <source src="@currentMusicUrl" type="audio/mpeg">
+                        Your browser does not support the audio element.
+                    </audio>
+                </div>
+            </div>
+        }
+        else
+        {
+            <p>No music is currently playing.</p>
+        }
+    </div>
+
+    <div class="broadcast-section mt-4">
+        <h4>Currently Playing on Other Devices</h4>
+        @if (!string.IsNullOrEmpty(remotePlaying))
+        {
+            <div class="alert alert-info">
+                <p><strong>@remotePlaying</strong> is playing on another device.</p>
+            </div>
+        }
+        else if (!string.IsNullOrEmpty(remotePaused))
+        {
+            <div class="alert alert-warning">
+                <p><strong>@remotePaused</strong> is paused on another device.</p>
+            </div>
+        }
+        else
+        {
+            <p>No music is currently playing on other devices.</p>
+        }
+    </div>
+</div>
+
+@code {
+    private HubConnection? hubConnection;
+    private List<string> musicFiles = new();
+    private string? currentMusicFile;
+    private string? currentMusicUrl;
+    private string? uploadMessage;
+    private bool uploadSuccess;
+    private string? remotePlaying;
+    private string? remotePaused;
+
+    protected override async Task OnInitializedAsync()
+    {
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/musichub"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        hubConnection.On<string>("ReceiveMusicPlaying", (musicName) =>
+        {
+            remotePlaying = musicName;
+            remotePaused = null;
+            StateHasChanged();
+        });
+
+        hubConnection.On<string>("ReceiveMusicPaused", (musicName) =>
+        {
+            remotePlaying = null;
+            remotePaused = musicName;
+            StateHasChanged();
+        });
+
+        hubConnection.On("ReceiveMusicStopped", () =>
+        {
+            remotePlaying = null;
+            remotePaused = null;
+            StateHasChanged();
+        });
+
+        hubConnection.On<string>("ReceiveNewMusicUploaded", (musicName) =>
+        {
+            LoadMusicFiles();
+            StateHasChanged();
+        });
+
+        await hubConnection.StartAsync();
+        LoadMusicFiles();
+    }
+
+    private void LoadMusicFiles()
+    {
+        musicFiles = MusicService.GetAllMusicFiles().ToList();
+    }
+
+    private async Task PlayMusic(string musicFile)
+    {
+        currentMusicFile = musicFile;
+        currentMusicUrl = MusicService.GetMusicUrl(musicFile);
+        StateHasChanged();
+
+        // If we're connected to the hub, inform others
+        if (hubConnection is not null && hubConnection.State == HubConnectionState.Connected)
+        {
+            await hubConnection.SendAsync("BroadcastMusicPlaying", musicFile);
+        }
+    }
+
+    private async Task BroadcastMusicPlaying(string musicFile)
+    {
+        if (hubConnection is not null && hubConnection.State == HubConnectionState.Connected)
+        {
+            await hubConnection.SendAsync("BroadcastMusicPlaying", musicFile);
+        }
+    }
+
+    private async Task BroadcastMusicPaused(string musicFile)
+    {
+        if (hubConnection is not null && hubConnection.State == HubConnectionState.Connected)
+        {
+            await hubConnection.SendAsync("BroadcastMusicPaused", musicFile);
+        }
+    }
+
+    private async Task BroadcastMusicStopped()
+    {
+        if (hubConnection is not null && hubConnection.State == HubConnectionState.Connected)
+        {
+            await hubConnection.SendAsync("BroadcastMusicStopped");
+        }
+    }
+
+    private async Task UploadMusic(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            var result = await MusicService.UploadMusicAsync(file);
+
+            if (result != null)
+            {
+                uploadMessage = $"File '{file.Name}' uploaded successfully.";
+                uploadSuccess = true;
+                LoadMusicFiles();
+
+                // Broadcast to all clients that a new music file was uploaded
+                if (hubConnection is not null && hubConnection.State == HubConnectionState.Connected)
+                {
+                    await hubConnection.SendAsync("BroadcastNewMusicUploaded", result);
+                }
+            }
+            else
+            {
+                uploadMessage = $"Failed to upload file '{file.Name}'. Only MP3, WAV, and OGG files are supported.";
+                uploadSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            uploadMessage = $"Error: {ex.Message}";
+            uploadSuccess = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

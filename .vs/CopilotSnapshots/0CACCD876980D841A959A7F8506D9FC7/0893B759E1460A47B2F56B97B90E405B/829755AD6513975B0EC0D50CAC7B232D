@@ -1,0 +1,27 @@
+﻿using Microsoft.AspNetCore.SignalR;
+
+namespace BlazorApp2.Hubs
+{
+    public class MusicHub : Hub
+    {
+        public async Task BroadcastMusicPlaying(string musicName)
+        {
+            await Clients.All.SendAsync("ReceiveMusicPlaying", musicName);
+        }
+
+        public async Task BroadcastMusicPaused(string musicName)
+        {
+            await Clients.All.SendAsync("ReceiveMusicPaused", musicName);
+        }
+
+        public async Task BroadcastMusicStopped()
+        {
+            await Clients.All.SendAsync("ReceiveMusicStopped");
+        }
+
+        public async Task BroadcastNewMusicUploaded(string musicName)
+        {
+            await Clients.All.SendAsync("ReceiveNewMusicUploaded", musicName);
+        }
+    }
+}

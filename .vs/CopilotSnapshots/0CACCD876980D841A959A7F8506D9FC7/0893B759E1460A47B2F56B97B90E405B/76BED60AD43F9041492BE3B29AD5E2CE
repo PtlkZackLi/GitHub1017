@@ -1,0 +1,35 @@
+﻿@page "/"
+
+<PageTitle>Home - Music Streaming App</PageTitle>
+
+<h1>Welcome to Music Streaming App</h1>
+
+<p>
+    This application allows you to upload and stream music files with real-time integration
+    using SignalR. You can see what music is playing on other connected devices in real-time.
+</p>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Features</h5>
+                <ul>
+                    <li>Upload music files (MP3, WAV, OGG formats)</li>
+                    <li>Stream music from the server</li>
+                    <li>See what's playing on other connected devices</li>
+                    <li>Real-time updates using SignalR</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Get Started</h5>
+                <p>Click on the Music Player link in the navigation menu to access the music player.</p>
+                <a href="/musicplayer" class="btn btn-primary">Go to Music Player</a>
+            </div>
+        </div>
+    </div>
+</div>
